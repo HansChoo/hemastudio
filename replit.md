@@ -6,7 +6,7 @@ A React + TypeScript + Vite frontend for HEMA Studio, a Korean creative producti
 
 - **Framework**: React 19 with TypeScript
 - **Build Tool**: Vite 6
-- **Backend**: Firebase (Authentication + Cloud Firestore)
+- **Backend**: Firebase Cloud Firestore (data storage)
 - **Styling**: Tailwind CSS (CDN), Framer Motion for animations
 - **Icons**: Lucide React
 - **Payments**: Toss Payments widget (CDN)
@@ -24,34 +24,29 @@ A React + TypeScript + Vite frontend for HEMA Studio, a Korean creative producti
 ├── tsconfig.json       # TypeScript configuration
 ├── lib/
 │   ├── firebase.ts     # Firebase initialization
-│   ├── auth.ts         # Authentication (sign in/up/out, onAuthStateChanged)
 │   └── firestore.ts    # Firestore CRUD (portfolios, orders)
 ├── components/
-│   ├── AdminDashboard.tsx  # Admin panel with CRUD for portfolios/orders
+│   ├── AdminDashboard.tsx      # Admin panel with CRUD for portfolios/orders
+│   ├── AdminPasswordModal.tsx  # Password gate for admin access
 │   ├── FilterBar.tsx
 │   ├── Hero.tsx
-│   ├── LoginModal.tsx      # Email/password login with Firebase Auth
 │   ├── PaymentModal.tsx
 │   ├── PortfolioCard.tsx
 │   ├── PortfolioModal.tsx
 │   └── ProductPage.tsx
-└── scripts/
-    └── setup-admin.ts  # Script to create admin account
 ```
+
+## Admin Access
+
+- Admin page accessed via password (set in VITE_ADMIN_PASSWORD env var)
+- No user authentication required; admin password gate only
+- Click "관리자" button in top nav → enter password → access admin dashboard
 
 ## Firebase Setup
 
-- **Authentication**: Email/password login
 - **Firestore Collections**:
   - `portfolios` - Portfolio items (CRUD from admin dashboard)
   - `orders` - Customer orders
-  - `users` - User profiles with `isAdmin` flag
-
-### Creating Admin Account
-
-```bash
-npx tsx scripts/setup-admin.ts <email> <password> [name]
-```
 
 ### Environment Variables (VITE_ prefix)
 
@@ -61,6 +56,7 @@ npx tsx scripts/setup-admin.ts <email> <password> [name]
 - `VITE_FIREBASE_STORAGE_BUCKET`
 - `VITE_FIREBASE_MESSAGING_SENDER_ID`
 - `VITE_FIREBASE_APP_ID`
+- `VITE_ADMIN_PASSWORD` - Admin dashboard access password
 
 ## Development
 

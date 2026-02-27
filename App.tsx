@@ -1,17 +1,16 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { PortfolioItem, Category, User } from './types';
+import { PortfolioItem, Category } from './types';
 import { getPortfolios } from './lib/firestore';
-import { onAuthStateChanged, signOut } from './lib/auth';
 import Hero from './components/Hero';
 import FilterBar from './components/FilterBar';
 import PortfolioCard from './components/PortfolioCard';
 import PortfolioModal from './components/PortfolioModal';
 import ProductPage from './components/ProductPage';
-import LoginModal from './components/LoginModal';
 import PaymentModal from './components/PaymentModal';
 import AdminDashboard from './components/AdminDashboard';
+import AdminPasswordModal from './components/AdminPasswordModal';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Search, X, Loader2, Sparkles, MessageCircle, LogIn, User as UserIcon } from 'lucide-react';
+import { Search, X, Loader2, Sparkles, MessageCircle, LogIn, Settings } from 'lucide-react';
 
 const ITEMS_PER_PAGE = 12;
 
@@ -24,10 +23,9 @@ const App: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedTag, setSelectedTag] = useState<string | null>(null);
   const [isScrolled, setIsScrolled] = useState(false);
-  
-  const [user, setUser] = useState<User | null>(null);
-  const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
-  const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
+
+  const [isAdminAuthenticated, setIsAdminAuthenticated] = useState(false);
+  const [showAdminPasswordModal, setShowAdminPasswordModal] = useState(false);
 
   const [isTransitioning, setIsTransitioning] = useState(false);
   const [transitionMessage, setTransitionMessage] = useState('');
@@ -37,13 +35,6 @@ const App: React.FC = () => {
 
   const [portfolioItems, setPortfolioItems] = useState<PortfolioItem[]>([]);
   const [dataLoading, setDataLoading] = useState(true);
-
-  useEffect(() => {
-    const unsubscribe = onAuthStateChanged((userData) => {
-      setUser(userData);
-    });
-    return () => unsubscribe();
-  }, []);
 
   useEffect(() => {
     loadPortfolios();
@@ -167,52 +158,38 @@ const App: React.FC = () => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const handleReservationClick = () => {
-      if (!user) {
-          setIsLoginModalOpen(true);
-      } else {
-          setIsPaymentModalOpen(true);
-      }
-  };
-
-  const handleLogout = async () => {
-    await signOut();
-    setUser(null);
-    if (currentView === 'ADMIN') {
-      setCurrentView('HOME');
+  const handleAdminClick = () => {
+    if (isAdminAuthenticated) {
+      setCurrentView('ADMIN');
+    } else {
+      setShowAdminPasswordModal(true);
     }
   };
 
+  const handleAdminAuthSuccess = () => {
+    setIsAdminAuthenticated(true);
+    setShowAdminPasswordModal(false);
+    setCurrentView('ADMIN');
+  };
+
   if (currentView === 'ADMIN') {
-      if (!user?.isAdmin) {
-        setCurrentView('HOME');
-        return null;
-      }
-      return <AdminDashboard onClose={() => setCurrentView('HOME')} />;
+    if (!isAdminAuthenticated) {
+      setCurrentView('HOME');
+      return null;
+    }
+    return (
+      <AdminDashboard onClose={() => setCurrentView('HOME')} />
+    );
   }
 
   return (
     <div className="min-h-screen bg-[#eff0f6] font-sans text-[#1d1d1f] selection:bg-[#0071e3] selection:text-white">
-      
-      {isLoginModalOpen && (
-          <LoginModal 
-            onClose={() => setIsLoginModalOpen(false)} 
-            onLogin={(userData) => {
-                setUser(userData);
-                setIsLoginModalOpen(false);
-            }} 
-          />
-      )}
 
-      {isPaymentModalOpen && selectedItem && (
-          <PaymentModal
-            item={selectedItem}
-            onClose={() => setIsPaymentModalOpen(false)}
-            onSuccess={() => {
-                setIsPaymentModalOpen(false);
-                setSelectedItem(null);
-            }}
-          />
+      {showAdminPasswordModal && (
+        <AdminPasswordModal
+          onClose={() => setShowAdminPasswordModal(false)}
+          onSuccess={handleAdminAuthSuccess}
+        />
       )}
 
       <motion.a 
@@ -289,51 +266,13 @@ const App: React.FC = () => {
                     스튜디오 피드
                 </button>
                 
-                {user ? (
-                    <div className="flex items-center gap-3">
-                         {user.isAdmin && (
-                            <button 
-                                onClick={() => setCurrentView('ADMIN')}
-                                className="hidden md:block text-xs font-semibold text-[#0071e3] bg-blue-50 px-3 py-1.5 rounded-full hover:bg-blue-100 transition-colors"
-                            >
-                                관리자 모드
-                            </button>
-                         )}
-                         <div className="relative group">
-                             <div className="w-8 h-8 rounded-full overflow-hidden border border-gray-200 cursor-pointer hover:ring-2 hover:ring-[#0071e3] transition-all">
-                                 <img src={user.avatarUrl} alt={user.name} className="w-full h-full object-cover" />
-                             </div>
-                             <div className="absolute right-0 top-full mt-2 bg-white rounded-xl shadow-lg border border-gray-100 py-2 w-40 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all">
-                                 <div className="px-4 py-2 border-b border-gray-100">
-                                     <p className="text-sm font-semibold text-[#1d1d1f]">{user.name}</p>
-                                     <p className="text-xs text-gray-400">{user.email}</p>
-                                 </div>
-                                 {user.isAdmin && (
-                                     <button
-                                         onClick={() => setCurrentView('ADMIN')}
-                                         className="md:hidden w-full text-left px-4 py-2 text-sm text-[#0071e3] hover:bg-gray-50"
-                                     >
-                                         관리자 모드
-                                     </button>
-                                 )}
-                                 <button
-                                     onClick={handleLogout}
-                                     className="w-full text-left px-4 py-2 text-sm text-red-500 hover:bg-gray-50"
-                                 >
-                                     로그아웃
-                                 </button>
-                             </div>
-                         </div>
-                    </div>
-                ) : (
-                    <button 
-                        onClick={() => setIsLoginModalOpen(true)}
-                        className="bg-[#1d1d1f] text-white px-3 py-2 md:px-5 md:py-2 rounded-full text-xs md:text-[13px] font-semibold hover:bg-[#3a3a3c] transition-all shadow-md hover:shadow-lg transform hover:-translate-y-0.5 whitespace-nowrap flex items-center gap-1.5"
-                    >
-                        <LogIn size={14} />
-                        로그인
-                    </button>
-                )}
+                <button
+                    onClick={handleAdminClick}
+                    className="bg-[#1d1d1f] text-white px-3 py-2 md:px-5 md:py-2 rounded-full text-xs md:text-[13px] font-semibold hover:bg-[#3a3a3c] transition-all shadow-md hover:shadow-lg transform hover:-translate-y-0.5 whitespace-nowrap flex items-center gap-1.5"
+                >
+                    <Settings size={14} />
+                    관리자
+                </button>
             </div>
         </div>
       </nav>
@@ -503,7 +442,7 @@ const App: React.FC = () => {
         item={selectedItem} 
         onClose={() => setSelectedItem(null)}
         onTagClick={handleTagClick}
-        onReservationClick={handleReservationClick}
+        onReservationClick={() => {}}
       />
     </div>
   );

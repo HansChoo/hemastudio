@@ -4,7 +4,6 @@ import {
     getPortfolios, addPortfolio, updatePortfolio, deletePortfolio, togglePortfolioVisibility,
     getOrders, updateOrderStatus, deleteOrder
 } from '../lib/firestore';
-import { signOut } from '../lib/auth';
 import { 
     LayoutDashboard, 
     ShoppingBag, 
@@ -124,8 +123,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onClose }) => {
     setTimeout(() => setToast(null), 3000);
   };
 
-  const handleLogout = async () => {
-    await signOut();
+  const handleLogout = () => {
     onClose();
   };
 
