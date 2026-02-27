@@ -1,7 +1,6 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { PortfolioItem, Category } from './types';
 import { getPortfolios } from './lib/firestore';
-import { seedPortfoliosIfEmpty } from './lib/seed';
 import Hero from './components/Hero';
 import FilterBar from './components/FilterBar';
 import PortfolioCard from './components/PortfolioCard';
@@ -78,7 +77,6 @@ const App: React.FC = () => {
   const loadPortfolios = async () => {
     setDataLoading(true);
     try {
-      await seedPortfoliosIfEmpty();
       const items = await getPortfolios();
       const visibleItems = items.filter((item: any) => item.visible !== false);
       setPortfolioItems(visibleItems);
