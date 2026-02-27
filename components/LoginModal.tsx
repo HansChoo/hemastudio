@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, User } from 'lucide-react';
+import { X, User, Mail, Lock, AlertCircle, Loader2 } from 'lucide-react';
 import { User as UserType } from '../types';
+import { signIn, signUp } from '../lib/auth';
 
 interface LoginModalProps {
   onClose: () => void;
@@ -9,22 +10,43 @@ interface LoginModalProps {
 }
 
 const LoginModal: React.FC<LoginModalProps> = ({ onClose, onLogin }) => {
-  
-  const handleSocialLogin = (provider: 'kakao' | 'naver' | 'google') => {
-    // In a real app, this would trigger Firebase Auth
-    // Here we simulate a successful login
-    const mockUser: UserType = {
-        id: 'user_123',
-        name: '헤마 고객님',
-        email: 'customer@hema.com',
-        avatarUrl: `https://api.dicebear.com/7.x/avataaars/svg?seed=Felix`,
-        isAdmin: true // Set to true to demonstrate Admin features
-    };
-    
-    setTimeout(() => {
-        onLogin(mockUser);
-        onClose();
-    }, 800);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [name, setName] = useState('');
+  const [isSignUp, setIsSignUp] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    setLoading(true);
+
+    try {
+      let user: UserType;
+      if (isSignUp) {
+        user = await signUp(email, password, name);
+      } else {
+        user = await signIn(email, password);
+      }
+      onLogin(user);
+      onClose();
+    } catch (err: any) {
+      const code = err?.code || '';
+      if (code === 'auth/user-not-found' || code === 'auth/invalid-credential') {
+        setError('이메일 또는 비밀번호가 올바르지 않습니다.');
+      } else if (code === 'auth/email-already-in-use') {
+        setError('이미 사용 중인 이메일입니다.');
+      } else if (code === 'auth/weak-password') {
+        setError('비밀번호는 6자 이상이어야 합니다.');
+      } else if (code === 'auth/invalid-email') {
+        setError('올바른 이메일 형식을 입력해주세요.');
+      } else {
+        setError('로그인에 실패했습니다. 다시 시도해주세요.');
+      }
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -51,38 +73,88 @@ const LoginModal: React.FC<LoginModalProps> = ({ onClose, onLogin }) => {
                 <X size={24} />
             </button>
 
-            <div className="text-center mb-8">
+            <div className="text-center mb-6">
                 <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
                     <User size={32} className="text-gray-400" />
                 </div>
-                <h2 className="text-2xl font-bold text-[#1d1d1f] mb-2">환영합니다!</h2>
+                <h2 className="text-2xl font-bold text-[#1d1d1f] mb-2">
+                    {isSignUp ? '회원가입' : '환영합니다!'}
+                </h2>
                 <p className="text-sm text-[#86868b]">
-                    로그인하고 헤마스튜디오의<br/>특별한 서비스를 이용해보세요.
+                    {isSignUp 
+                        ? '계정을 만들고 서비스를 이용하세요.' 
+                        : '로그인하고 헤마스튜디오의\n특별한 서비스를 이용해보세요.'}
                 </p>
             </div>
 
-            <div className="space-y-3">
-                <button 
-                    onClick={() => handleSocialLogin('kakao')}
-                    className="w-full h-12 bg-[#FEE500] hover:bg-[#FDD835] text-[#3C1E1E] rounded-xl font-semibold text-[15px] flex items-center justify-center gap-2 transition-transform active:scale-95"
+            <form onSubmit={handleSubmit} className="space-y-3">
+                {isSignUp && (
+                    <div className="relative">
+                        <User size={18} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
+                        <input
+                            type="text"
+                            placeholder="이름"
+                            value={name}
+                            onChange={(e) => setName(e.target.value)}
+                            required
+                            className="w-full h-12 pl-11 pr-4 border border-gray-200 rounded-xl text-[15px] focus:ring-2 focus:ring-[#0071e3]/30 focus:border-[#0071e3]/30 transition-all"
+                        />
+                    </div>
+                )}
+                <div className="relative">
+                    <Mail size={18} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
+                    <input
+                        type="email"
+                        placeholder="이메일"
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        required
+                        className="w-full h-12 pl-11 pr-4 border border-gray-200 rounded-xl text-[15px] focus:ring-2 focus:ring-[#0071e3]/30 focus:border-[#0071e3]/30 transition-all"
+                    />
+                </div>
+                <div className="relative">
+                    <Lock size={18} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
+                    <input
+                        type="password"
+                        placeholder="비밀번호"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        required
+                        minLength={6}
+                        className="w-full h-12 pl-11 pr-4 border border-gray-200 rounded-xl text-[15px] focus:ring-2 focus:ring-[#0071e3]/30 focus:border-[#0071e3]/30 transition-all"
+                    />
+                </div>
+
+                {error && (
+                    <div className="flex items-center gap-2 text-red-500 text-sm bg-red-50 px-3 py-2 rounded-lg">
+                        <AlertCircle size={16} />
+                        <span>{error}</span>
+                    </div>
+                )}
+
+                <button
+                    type="submit"
+                    disabled={loading}
+                    className="w-full h-12 bg-[#1d1d1f] hover:bg-[#3a3a3c] text-white rounded-xl font-semibold text-[15px] flex items-center justify-center gap-2 transition-all disabled:opacity-50"
                 >
-                    <span className="font-bold">Kakao</span>로 계속하기
+                    {loading ? (
+                        <Loader2 size={20} className="animate-spin" />
+                    ) : (
+                        isSignUp ? '가입하기' : '로그인'
+                    )}
                 </button>
-                <button 
-                    onClick={() => handleSocialLogin('naver')}
-                    className="w-full h-12 bg-[#03C75A] hover:bg-[#02b351] text-white rounded-xl font-semibold text-[15px] flex items-center justify-center gap-2 transition-transform active:scale-95"
+            </form>
+
+            <div className="mt-4 text-center">
+                <button
+                    onClick={() => { setIsSignUp(!isSignUp); setError(''); }}
+                    className="text-sm text-[#0071e3] hover:underline font-medium"
                 >
-                    <span className="font-bold">Naver</span>로 계속하기
-                </button>
-                <button 
-                    onClick={() => handleSocialLogin('google')}
-                    className="w-full h-12 bg-white border border-gray-200 hover:bg-gray-50 text-[#1d1d1f] rounded-xl font-semibold text-[15px] flex items-center justify-center gap-2 transition-transform active:scale-95"
-                >
-                    <span className="font-bold">Google</span>로 계속하기
+                    {isSignUp ? '이미 계정이 있나요? 로그인' : '계정이 없나요? 회원가입'}
                 </button>
             </div>
 
-            <p className="text-[11px] text-[#86868b] text-center mt-6">
+            <p className="text-[11px] text-[#86868b] text-center mt-4">
                 로그인 시 이용약관 및 개인정보처리방침에 동의하게 됩니다.
             </p>
         </motion.div>

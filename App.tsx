@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { MOCK_PORTFOLIO } from './constants';
 import { PortfolioItem, Category, User } from './types';
+import { getPortfolios } from './lib/firestore';
+import { onAuthStateChanged, signOut } from './lib/auth';
 import Hero from './components/Hero';
 import FilterBar from './components/FilterBar';
 import PortfolioCard from './components/PortfolioCard';
@@ -24,20 +25,49 @@ const App: React.FC = () => {
   const [selectedTag, setSelectedTag] = useState<string | null>(null);
   const [isScrolled, setIsScrolled] = useState(false);
   
-  // Auth & Admin State
   const [user, setUser] = useState<User | null>(null);
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
 
-  // Transition State
   const [isTransitioning, setIsTransitioning] = useState(false);
   const [transitionMessage, setTransitionMessage] = useState('');
 
-  // Infinite Scroll State
   const [displayCount, setDisplayCount] = useState(ITEMS_PER_PAGE);
   const loadMoreRef = useRef<HTMLDivElement>(null);
 
-  // Scroll Listener for Navbar
+  const [portfolioItems, setPortfolioItems] = useState<PortfolioItem[]>([]);
+  const [dataLoading, setDataLoading] = useState(true);
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged((userData) => {
+      setUser(userData);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    loadPortfolios();
+  }, []);
+
+  const loadPortfolios = async () => {
+    setDataLoading(true);
+    try {
+      const items = await getPortfolios();
+      const visibleItems = items.filter((item: any) => item.visible !== false);
+      setPortfolioItems(visibleItems);
+    } catch (err) {
+      console.error('Failed to load portfolios:', err);
+    } finally {
+      setDataLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (currentView === 'HOME') {
+      loadPortfolios();
+    }
+  }, [currentView]);
+
   useEffect(() => {
     const handleScroll = () => {
       setIsScrolled(window.scrollY > 50);
@@ -46,9 +76,8 @@ const App: React.FC = () => {
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
-  // Filter Logic
   const allFilteredItems = useMemo(() => {
-    let items = MOCK_PORTFOLIO;
+    let items = portfolioItems;
 
     if (selectedCategory !== 'ALL') {
       items = items.filter(item => item.category === selectedCategory);
@@ -67,7 +96,7 @@ const App: React.FC = () => {
     }
 
     return items;
-  }, [selectedCategory, searchTerm, selectedTag]);
+  }, [portfolioItems, selectedCategory, searchTerm, selectedTag]);
 
   const visibleItems = useMemo(() => {
     return allFilteredItems.slice(0, displayCount);
@@ -146,15 +175,25 @@ const App: React.FC = () => {
       }
   };
 
-  // If Admin View
+  const handleLogout = async () => {
+    await signOut();
+    setUser(null);
+    if (currentView === 'ADMIN') {
+      setCurrentView('HOME');
+    }
+  };
+
   if (currentView === 'ADMIN') {
+      if (!user?.isAdmin) {
+        setCurrentView('HOME');
+        return null;
+      }
       return <AdminDashboard onClose={() => setCurrentView('HOME')} />;
   }
 
   return (
     <div className="min-h-screen bg-[#eff0f6] font-sans text-[#1d1d1f] selection:bg-[#0071e3] selection:text-white">
       
-      {/* Auth & Payment Modals */}
       {isLoginModalOpen && (
           <LoginModal 
             onClose={() => setIsLoginModalOpen(false)} 
@@ -176,8 +215,6 @@ const App: React.FC = () => {
           />
       )}
 
-
-      {/* Floating KakaoTalk Button */}
       <motion.a 
         href="#" 
         target="_blank"
@@ -194,7 +231,6 @@ const App: React.FC = () => {
         <MessageCircle fill="#3C1E1E" className="text-[#3C1E1E] w-7 h-7 md:w-8 md:h-8" />
       </motion.a>
 
-      {/* Transition Overlay */}
       <AnimatePresence>
         {isTransitioning && (
             <motion.div
@@ -225,7 +261,6 @@ const App: React.FC = () => {
         )}
       </AnimatePresence>
 
-      {/* Dynamic Navbar */}
       <nav 
         className={`fixed top-0 left-0 right-0 z-50 transition-all duration-500 ${
             isScrolled 
@@ -234,15 +269,12 @@ const App: React.FC = () => {
         }`}
       >
         <div className="max-w-[1600px] mx-auto px-6 h-16 md:h-20 flex items-center justify-between">
-            {/* Logo Area */}
             <div 
                 className="flex items-center gap-2 cursor-pointer group" 
                 onClick={navigateToHome}
             >
-                 {/* Logo placeholder */}
             </div>
             
-            {/* Menu Items */}
             <div className="flex items-center gap-3 md:gap-8">
                 <button 
                     onClick={() => setCurrentView('PRODUCT')}
@@ -257,7 +289,6 @@ const App: React.FC = () => {
                     스튜디오 피드
                 </button>
                 
-                {/* User Menu */}
                 {user ? (
                     <div className="flex items-center gap-3">
                          {user.isAdmin && (
@@ -268,8 +299,30 @@ const App: React.FC = () => {
                                 관리자 모드
                             </button>
                          )}
-                         <div className="w-8 h-8 rounded-full overflow-hidden border border-gray-200 cursor-pointer hover:ring-2 hover:ring-[#0071e3] transition-all">
-                             <img src={user.avatarUrl} alt={user.name} className="w-full h-full object-cover" />
+                         <div className="relative group">
+                             <div className="w-8 h-8 rounded-full overflow-hidden border border-gray-200 cursor-pointer hover:ring-2 hover:ring-[#0071e3] transition-all">
+                                 <img src={user.avatarUrl} alt={user.name} className="w-full h-full object-cover" />
+                             </div>
+                             <div className="absolute right-0 top-full mt-2 bg-white rounded-xl shadow-lg border border-gray-100 py-2 w-40 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all">
+                                 <div className="px-4 py-2 border-b border-gray-100">
+                                     <p className="text-sm font-semibold text-[#1d1d1f]">{user.name}</p>
+                                     <p className="text-xs text-gray-400">{user.email}</p>
+                                 </div>
+                                 {user.isAdmin && (
+                                     <button
+                                         onClick={() => setCurrentView('ADMIN')}
+                                         className="md:hidden w-full text-left px-4 py-2 text-sm text-[#0071e3] hover:bg-gray-50"
+                                     >
+                                         관리자 모드
+                                     </button>
+                                 )}
+                                 <button
+                                     onClick={handleLogout}
+                                     className="w-full text-left px-4 py-2 text-sm text-red-500 hover:bg-gray-50"
+                                 >
+                                     로그아웃
+                                 </button>
+                             </div>
                          </div>
                     </div>
                 ) : (
@@ -285,16 +338,13 @@ const App: React.FC = () => {
         </div>
       </nav>
 
-      {/* Unified Hero Section */}
       <Hero viewMode={currentView === 'ADMIN' ? 'HOME' : currentView} setViewMode={setCurrentView as any} />
 
       {currentView === 'HOME' ? (
         <main className="relative min-h-screen bg-[#f5f5f7]">
                 
-                {/* Portfolio Section */}
                 <div id="portfolio-grid" className="max-w-[1600px] mx-auto px-4 md:px-6 pt-10 md:pt-16">
                     
-                    {/* 1. Title Section */}
                     <div className="text-center mb-6 md:mb-8">
                         <h2 className="text-2xl md:text-4xl font-semibold tracking-tight mb-3 text-[#1d1d1f] break-keep">
                             헤마와 함께한 감동의 순간들을 확인해보세요
@@ -304,7 +354,6 @@ const App: React.FC = () => {
                         </p>
                     </div>
 
-                    {/* 2. Sticky Filter Bar */}
                     <div className="sticky top-16 md:top-20 z-40 py-4 bg-[#f5f5f7]/90 backdrop-blur-md mb-6 transition-all flex justify-center">
                         <FilterBar 
                             selectedCategory={selectedCategory} 
@@ -315,7 +364,6 @@ const App: React.FC = () => {
                         />
                     </div>
 
-                    {/* 3. Search & Active Tag (Centered) */}
                     <div className="flex flex-col items-center mb-10 md:mb-14">
                         <div className="relative group w-full md:w-[420px]">
                             <input 
@@ -328,7 +376,6 @@ const App: React.FC = () => {
                             <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-[#86868b]" size={18} />
                         </div>
 
-                         {/* Active Tag Display */}
                         <AnimatePresence>
                             {selectedTag && (
                                 <motion.div 
@@ -353,45 +400,58 @@ const App: React.FC = () => {
 
                 </div>
 
-                {/* Portfolio Grid */}
                 <section className="max-w-[1600px] mx-auto px-4 md:px-6 pb-32">
-                <motion.div 
-                    className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 md:gap-6"
-                >
-                    <AnimatePresence>
-                        {visibleItems.length > 0 ? (
-                            visibleItems.map((item) => (
-                            <PortfolioCard 
-                                key={item.id} 
-                                item={item} 
-                                onClick={setSelectedItem} 
-                            />
-                            ))
-                        ) : (
-                            <motion.div 
-                                initial={{ opacity: 0 }} 
-                                animate={{ opacity: 1 }}
-                                exit={{ opacity: 0 }}
-                                className="col-span-full py-32 flex flex-col items-center justify-center text-center"
-                            >
-                                <div className="w-16 h-16 bg-white rounded-full shadow-sm flex items-center justify-center mb-4">
-                                    <Search size={24} className="text-[#86868b]" />
-                                </div>
-                                <h3 className="text-lg font-semibold mb-1 text-[#1d1d1f]">검색 결과가 없습니다</h3>
-                                <p className="text-[#86868b] text-sm">다른 키워드로 검색해보시거나 카테고리를 변경해보세요.</p>
-                            </motion.div>
-                        )}
-                    </AnimatePresence>
-                </motion.div>
-
-                {/* Loader */}
-                {allFilteredItems.length > 0 && hasMore && (
-                    <div ref={loadMoreRef} className="w-full py-16 flex justify-center">
-                        <div className="flex items-center gap-2 text-[#86868b]">
-                            <Loader2 className="animate-spin" size={20} />
-                            <span className="text-sm font-medium tracking-wide">더 불러오는 중...</span>
+                {dataLoading ? (
+                    <div className="flex justify-center py-20">
+                        <div className="flex items-center gap-3 text-[#86868b]">
+                            <Loader2 className="animate-spin" size={24} />
+                            <span className="font-medium">포트폴리오를 불러오는 중...</span>
                         </div>
                     </div>
+                ) : (
+                  <>
+                    <motion.div 
+                        className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 md:gap-6"
+                    >
+                        <AnimatePresence>
+                            {visibleItems.length > 0 ? (
+                                visibleItems.map((item) => (
+                                <PortfolioCard 
+                                    key={item.id} 
+                                    item={item} 
+                                    onClick={setSelectedItem} 
+                                />
+                                ))
+                            ) : (
+                                <motion.div 
+                                    initial={{ opacity: 0 }} 
+                                    animate={{ opacity: 1 }}
+                                    exit={{ opacity: 0 }}
+                                    className="col-span-full py-32 flex flex-col items-center justify-center text-center"
+                                >
+                                    <div className="w-16 h-16 bg-white rounded-full shadow-sm flex items-center justify-center mb-4">
+                                        <Search size={24} className="text-[#86868b]" />
+                                    </div>
+                                    <h3 className="text-lg font-semibold mb-1 text-[#1d1d1f]">
+                                        {portfolioItems.length === 0 ? '아직 포트폴리오가 없습니다' : '검색 결과가 없습니다'}
+                                    </h3>
+                                    <p className="text-[#86868b] text-sm">
+                                        {portfolioItems.length === 0 ? '관리자가 포트폴리오를 등록하면 여기에 표시됩니다.' : '다른 키워드로 검색해보시거나 카테고리를 변경해보세요.'}
+                                    </p>
+                                </motion.div>
+                            )}
+                        </AnimatePresence>
+                    </motion.div>
+
+                    {allFilteredItems.length > 0 && hasMore && (
+                        <div ref={loadMoreRef} className="w-full py-16 flex justify-center">
+                            <div className="flex items-center gap-2 text-[#86868b]">
+                                <Loader2 className="animate-spin" size={20} />
+                                <span className="text-sm font-medium tracking-wide">더 불러오는 중...</span>
+                            </div>
+                        </div>
+                    )}
+                  </>
                 )}
                 </section>
         </main>
@@ -399,7 +459,6 @@ const App: React.FC = () => {
         <ProductPage onProductClick={handleTagClick} />
       )}
 
-      {/* Modern Minimal Footer */}
       <footer className="bg-white border-t border-gray-100 pt-20 pb-10 relative z-10">
         <div className="max-w-[1600px] mx-auto px-6">
             <div className="grid md:grid-cols-12 gap-12 mb-16">
@@ -431,7 +490,7 @@ const App: React.FC = () => {
             </div>
             
             <div className="flex flex-col md:flex-row justify-between items-center pt-8 border-t border-gray-100 text-[#86868b] text-xs font-medium">
-                <p>© 2024 HEMA STUDIO. All rights reserved.</p>
+                <p>&copy; 2024 HEMA STUDIO. All rights reserved.</p>
                 <div className="flex gap-4 mt-4 md:mt-0">
                     <span className="cursor-pointer hover:text-[#1d1d1f]">이용약관</span>
                     <span className="cursor-pointer hover:text-[#1d1d1f]">개인정보처리방침</span>
@@ -440,7 +499,6 @@ const App: React.FC = () => {
         </div>
       </footer>
 
-      {/* Detail Modal */}
       <PortfolioModal 
         item={selectedItem} 
         onClose={() => setSelectedItem(null)}
