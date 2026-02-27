@@ -10,14 +10,20 @@ import PaymentModal from './components/PaymentModal';
 import AdminDashboard from './components/AdminDashboard';
 import AdminPasswordModal from './components/AdminPasswordModal';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Search, X, Loader2, Sparkles, MessageCircle, LogIn, Settings } from 'lucide-react';
+import { Search, X, Loader2, Sparkles, MessageCircle } from 'lucide-react';
 
 const ITEMS_PER_PAGE = 12;
 
 type ViewState = 'HOME' | 'PRODUCT' | 'ADMIN';
 
+function getInitialView(): ViewState {
+  const path = window.location.pathname;
+  if (path === '/admin') return 'ADMIN';
+  return 'HOME';
+}
+
 const App: React.FC = () => {
-  const [currentView, setCurrentView] = useState<ViewState>('HOME');
+  const [currentView, setCurrentView] = useState<ViewState>(getInitialView());
   const [selectedCategory, setSelectedCategory] = useState<Category | string>('ALL');
   const [selectedItem, setSelectedItem] = useState<PortfolioItem | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -35,6 +41,34 @@ const App: React.FC = () => {
 
   const [portfolioItems, setPortfolioItems] = useState<PortfolioItem[]>([]);
   const [dataLoading, setDataLoading] = useState(true);
+
+  useEffect(() => {
+    if (currentView === 'ADMIN' && !isAdminAuthenticated) {
+      setShowAdminPasswordModal(true);
+    }
+  }, [currentView, isAdminAuthenticated]);
+
+  useEffect(() => {
+    const handlePopState = () => {
+      const path = window.location.pathname;
+      if (path === '/admin') {
+        setCurrentView('ADMIN');
+      } else {
+        setCurrentView('HOME');
+        setShowAdminPasswordModal(false);
+      }
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+
+  const navigate = (view: ViewState) => {
+    setCurrentView(view);
+    const targetPath = view === 'ADMIN' ? '/admin' : '/';
+    if (window.location.pathname !== targetPath) {
+      window.history.pushState({}, '', targetPath);
+    }
+  };
 
   useEffect(() => {
     loadPortfolios();
@@ -127,7 +161,7 @@ const App: React.FC = () => {
     setTransitionMessage(`${tag.replace('#', '')}`);
     setIsTransitioning(true);
 
-    setCurrentView('HOME');
+    navigate('HOME');
 
     setTimeout(() => {
         setSelectedTag(formattedTag);
@@ -154,31 +188,29 @@ const App: React.FC = () => {
   const clearTag = () => setSelectedTag(null);
 
   const navigateToHome = () => {
-    setCurrentView('HOME');
+    navigate('HOME');
     window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
-
-  const handleAdminClick = () => {
-    if (isAdminAuthenticated) {
-      setCurrentView('ADMIN');
-    } else {
-      setShowAdminPasswordModal(true);
-    }
   };
 
   const handleAdminAuthSuccess = () => {
     setIsAdminAuthenticated(true);
     setShowAdminPasswordModal(false);
     setCurrentView('ADMIN');
+    if (window.location.pathname !== '/admin') {
+      window.history.replaceState({}, '', '/admin');
+    }
   };
 
-  if (currentView === 'ADMIN') {
+  const handleAdminPasswordClose = () => {
+    setShowAdminPasswordModal(false);
     if (!isAdminAuthenticated) {
-      setCurrentView('HOME');
-      return null;
+      navigate('HOME');
     }
+  };
+
+  if (currentView === 'ADMIN' && isAdminAuthenticated) {
     return (
-      <AdminDashboard onClose={() => setCurrentView('HOME')} />
+      <AdminDashboard onClose={() => navigate('HOME')} />
     );
   }
 
@@ -187,7 +219,7 @@ const App: React.FC = () => {
 
       {showAdminPasswordModal && (
         <AdminPasswordModal
-          onClose={() => setShowAdminPasswordModal(false)}
+          onClose={handleAdminPasswordClose}
           onSuccess={handleAdminAuthSuccess}
         />
       )}
@@ -254,30 +286,22 @@ const App: React.FC = () => {
             
             <div className="flex items-center gap-3 md:gap-8">
                 <button 
-                    onClick={() => setCurrentView('PRODUCT')}
+                    onClick={() => navigate('PRODUCT')}
                     className={`text-xs md:text-[15px] font-medium transition-colors whitespace-nowrap ${currentView === 'PRODUCT' ? 'text-[#1d1d1f] font-semibold' : 'text-[#86868b] hover:text-[#1d1d1f]'}`}
                 >
                     서비스 가이드
                 </button>
                 <button 
-                    onClick={() => setCurrentView('HOME')}
+                    onClick={() => navigate('HOME')}
                     className={`text-xs md:text-[15px] font-medium transition-colors whitespace-nowrap ${currentView === 'HOME' ? 'text-[#1d1d1f] font-semibold' : 'text-[#86868b] hover:text-[#1d1d1f]'}`}
                 >
                     스튜디오 피드
-                </button>
-                
-                <button
-                    onClick={handleAdminClick}
-                    className="bg-[#1d1d1f] text-white px-3 py-2 md:px-5 md:py-2 rounded-full text-xs md:text-[13px] font-semibold hover:bg-[#3a3a3c] transition-all shadow-md hover:shadow-lg transform hover:-translate-y-0.5 whitespace-nowrap flex items-center gap-1.5"
-                >
-                    <Settings size={14} />
-                    관리자
                 </button>
             </div>
         </div>
       </nav>
 
-      <Hero viewMode={currentView === 'ADMIN' ? 'HOME' : currentView} setViewMode={setCurrentView as any} />
+      <Hero viewMode={currentView === 'ADMIN' ? 'HOME' : currentView} setViewMode={(v: any) => navigate(v)} />
 
       {currentView === 'HOME' ? (
         <main className="relative min-h-screen bg-[#f5f5f7]">
@@ -412,8 +436,8 @@ const App: React.FC = () => {
                 <div className="md:col-span-2 md:col-start-7">
                     <h4 className="font-semibold text-xs text-[#1d1d1f] mb-4 uppercase tracking-wider">Services</h4>
                     <ul className="space-y-3 text-sm text-[#86868b]">
-                        <li onClick={() => setCurrentView('PRODUCT')} className="hover:text-[#0071e3] cursor-pointer transition-colors">서비스 가이드</li>
-                        <li onClick={() => setCurrentView('HOME')} className="hover:text-[#0071e3] cursor-pointer transition-colors">스튜디오 피드</li>
+                        <li onClick={() => navigate('PRODUCT')} className="hover:text-[#0071e3] cursor-pointer transition-colors">서비스 가이드</li>
+                        <li onClick={() => navigate('HOME')} className="hover:text-[#0071e3] cursor-pointer transition-colors">스튜디오 피드</li>
                         <li className="hover:text-[#0071e3] cursor-pointer transition-colors">예약 문의</li>
                     </ul>
                 </div>
